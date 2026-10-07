@@ -1,0 +1,63 @@
+---
+# The latest Node.js {{ node_major }}.x from nodejs.org into node_dir, checked against its SHASUMS256.txt.
+# Re-runs leave it alone while the major version matches; `-e node_update=true` takes the latest patch.
+- name: Install unpack tools
+  ansible.builtin.apt:
+    name: [xz-utils, ca-certificates]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Read the installed Node.js version
+  ansible.builtin.command: "{{ node_dir }}/bin/node --version"
+  register: node_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install Node.js
+  when: >-
+    node_installed.rc != 0 or not node_installed.stdout.startswith('v' ~ node_major ~ '.')
+    or node_update | default(false) | bool
+  vars:
+    node_arch: "{{ {'x86_64': 'x64', 'aarch64': 'arm64'}[ansible_facts.architecture] }}"
+    node_base: "https://nodejs.org/dist/latest-v{{ node_major }}.x"
+    node_file: "{{ node_shasums.content | regex_search('\\S+-linux-' ~ node_arch ~ '\\.tar\\.xz') }}"
+    node_sha: "{{ node_shasums.content | regex_search('(\\S+)\\s+' ~ node_file | regex_escape ~ '\\n', '\\1') | first }}"
+  block:
+    - name: Fetch the checksums
+      ansible.builtin.uri:
+        url: "{{ node_base }}/SHASUMS256.txt"
+        return_content: true
+      register: node_shasums
+      check_mode: false
+
+    - name: Download Node.js
+      ansible.builtin.get_url:
+        url: "{{ node_base }}/{{ node_file }}"
+        dest: "/tmp/{{ node_file }}"
+        checksum: "sha256:{{ node_sha }}"
+        mode: "0644"
+
+    - name: Remove the previous Node.js
+      ansible.builtin.file:
+        path: "{{ node_dir }}"
+        state: absent
+
+    - name: Create the Node.js directory
+      ansible.builtin.file:
+        path: "{{ node_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Unpack Node.js
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ node_file }}"
+        dest: "{{ node_dir }}"
+        remote_src: true
+        extra_opts: [--strip-components=1]
+      when: not ansible_check_mode
+
+    - name: Remove the download
+      ansible.builtin.file:
+        path: "/tmp/{{ node_file }}"
+        state: absent

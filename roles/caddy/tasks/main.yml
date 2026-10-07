@@ -1,0 +1,28 @@
+---
+# Caddy and the main Caddyfile belong to SecondBrain's deploy (its template carries the same import line);
+# this role only makes sure the line is there and gives every service its own file in caddy_sites_dir.
+- name: Install Caddy
+  ansible.builtin.apt:
+    name: caddy
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the sites directory
+  ansible.builtin.file:
+    path: "{{ caddy_sites_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Import the sites from the Caddyfile
+  ansible.builtin.lineinfile:
+    path: /etc/caddy/Caddyfile
+    line: "import {{ caddy_sites_dir }}/*.caddy"
+    insertafter: EOF
+    validate: caddy validate --adapter caddyfile --config %s
+  notify: Reload caddy
+
+- name: Run Caddy
+  ansible.builtin.systemd_service:
+    name: caddy
+    enabled: true
+    state: started

@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+{{ svc.subdomain }}.{{ base_domain }} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:{{ svc.port }}
+}

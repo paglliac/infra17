@@ -1,0 +1,226 @@
+---
+# One service from group_vars/all/services.yml: system user, checkout, .env, systemd unit, Caddy site.
+# Tasks tagged `app` are the fast path (make app): code, dependencies, restart.
+
+- name: Resolve the service settings
+  ansible.builtin.set_fact:
+    svc_name: "{{ svc_item.key }}"
+    svc: "{{ {'version': 'main', 'secrets': {}, 'env_from': '', 'env_keys': [], 'data_link': '', 'requirements': ''} | combine(svc_item.value) }}"
+    svc_home: "{{ srv_root }}/{{ svc_item.key }}"
+    svc_app: "{{ srv_root }}/{{ svc_item.key }}/app"
+    svc_data: "{{ srv_root }}/{{ svc_item.key }}/data"
+    svc_env: "{{ srv_root }}/{{ svc_item.key }}/.env"
+    svc_key: "{{ srv_root }}/{{ svc_item.key }}/.ssh/id_ed25519"
+    # Results of the previous service in the loop must not leak into this one.
+    svc_env_local: []
+    svc_checkout: {}
+    svc_pip: {}
+    svc_secrets: {}
+    svc_imported: {}
+    svc_unit: {}
+  tags: [always]
+
+- name: Install what every service needs
+  ansible.builtin.apt:
+    name: [acl, git]   # acl: become_user to the unprivileged service user
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the service user
+  ansible.builtin.user:
+    name: "{{ svc_name }}"
+    system: true
+    home: "{{ svc_home }}"
+    create_home: true
+    shell: /usr/sbin/nologin
+
+- name: Create the service directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ svc_name }}"
+    group: "{{ svc_name }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ svc_home }}", mode: "0750"}
+    - {path: "{{ svc_data }}", mode: "0700"}
+    - {path: "{{ svc_home }}/.ssh", mode: "0700"}
+
+# --- Read-only deploy key: one per repo, GitHub does not let the same key into two ---
+
+- name: Generate the deploy key
+  become_user: "{{ svc_name }}"
+  ansible.builtin.command: >-
+    ssh-keygen -q -t ed25519 -N "" -C "{{ svc_name }}-deploy@{{ inventory_hostname }}" -f {{ svc_key }}
+  args:
+    creates: "{{ svc_key }}"
+
+- name: Trust GitHub's host key
+  become_user: "{{ svc_name }}"
+  ansible.builtin.known_hosts:
+    path: "{{ svc_home }}/.ssh/known_hosts"
+    name: github.com
+    key: "{{ github_host_key }}"
+
+- name: Check the deploy key can read the repo
+  become_user: "{{ svc_name }}"
+  ansible.builtin.command: git ls-remote {{ svc.repo }} HEAD  # noqa: command-instead-of-module
+  environment:
+    GIT_SSH_COMMAND: "ssh -i {{ svc_key }} -o IdentitiesOnly=yes"
+  register: svc_repo_access
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  tags: [app]
+
+- name: Ask to register the deploy key
+  when: svc_repo_access.rc != 0
+  tags: [app]
+  block:
+    - name: Read the deploy key
+      ansible.builtin.slurp:
+        src: "{{ svc_key }}.pub"
+      register: svc_pubkey
+
+    - name: Stop until the key is on GitHub
+      ansible.builtin.fail:
+        msg: |-
+          The server cannot read {{ svc.repo }} yet. Add this key as a read-only deploy key
+          (https://github.com/{{ svc.repo | regex_replace('^.*:(.*)\.git$', '\1') }}/settings/keys/new,
+          "Allow write access" off) and run again:
+
+          {{ svc_pubkey.content | b64decode | trim }}
+
+# --- Code and dependencies ---
+
+- name: Check out the code
+  become_user: "{{ svc_name }}"
+  ansible.builtin.git:
+    repo: "{{ svc.repo }}"
+    dest: "{{ svc_app }}"
+    version: "{{ svc.version }}"
+    key_file: "{{ svc_key }}"
+    accept_hostkey: false
+  register: svc_checkout
+  tags: [app]
+
+- name: Point the app's data at the data directory
+  ansible.builtin.file:
+    src: "{{ svc_data }}"
+    dest: "{{ svc_app }}/{{ svc.data_link }}"
+    state: link
+    owner: "{{ svc_name }}"
+    group: "{{ svc_name }}"
+  when: svc.data_link | length > 0
+  tags: [app]
+
+- name: Install Python dependencies
+  become_user: "{{ svc_name }}"
+  ansible.builtin.pip:
+    requirements: "{{ svc_app }}/{{ svc.requirements }}"
+    virtualenv: "{{ svc_home }}/venv"
+    virtualenv_command: python3 -m venv
+  register: svc_pip
+  when: svc.runtime == 'python' and svc.requirements | length > 0
+  tags: [app]
+
+
+# --- .env: created once, edited line by line, never overwritten ---
+
+- name: Create .env
+  ansible.builtin.copy:
+    dest: "{{ svc_env }}"
+    content: ""
+    force: false
+    owner: "{{ svc_name }}"
+    group: "{{ svc_name }}"
+    mode: "0600"
+
+- name: Read .env
+  ansible.builtin.slurp:
+    src: "{{ svc_env }}"
+  register: svc_env_file
+  no_log: true
+
+- name: Find which keys are already set
+  ansible.builtin.set_fact:
+    svc_env_set: "{{ (svc_env_file.content | b64decode).splitlines() | select('match', '^[A-Z0-9_]+=.') | map('regex_replace', '=.*$', '') | list }}"
+
+- name: Generate the secrets (first run only)
+  ansible.builtin.lineinfile:
+    path: "{{ svc_env }}"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ lookup('ansible.builtin.password', '/dev/null', length=item.value, chars=['ascii_letters', 'digits']) }}"
+  loop: "{{ svc.secrets | dict2items | rejectattr('key', 'in', svc_env_set) | list }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: svc_secrets
+
+- name: Read the keys from the local .env
+  ansible.builtin.set_fact:
+    svc_env_local: >-
+      {{ (lookup('ansible.builtin.file', svc.env_from | expanduser, errors='ignore') | default('', true)).splitlines()
+         | select('match', '^(' ~ (svc.env_keys | join('|')) ~ ')=.') | list }}
+  when: svc.env_keys | length > 0 and svc.env_keys | difference(svc_env_set) | length > 0
+  no_log: true
+
+- name: Copy the keys from the local .env (first run only)
+  ansible.builtin.lineinfile:
+    path: "{{ svc_env }}"
+    regexp: "^{{ item | regex_replace('=.*$', '') }}="
+    line: "{{ item }}"
+  loop: "{{ svc_env_local | reject('match', '^(' ~ (svc_env_set + ['-']) | join('|') ~ ')=') | list }}"
+  register: svc_imported
+  no_log: true
+
+- name: Note the keys still missing
+  ansible.builtin.debug:
+    msg: >-
+      {{ svc_name }}: {{ svc_missing | join(', ') }} not in {{ svc_env }}. Set from a machine that has them:
+      add {{ svc_name }}_env_file to inventory.local.yml and run make deploy, or make env S={{ svc_name }}.
+  vars:
+    svc_missing: >-
+      {{ svc.env_keys | difference(svc_env_set)
+         | difference(svc_env_local | map('regex_replace', '=.*$', '') | list) }}
+  when: svc_missing | length > 0
+
+# --- systemd and Caddy ---
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: service.j2
+    dest: "/etc/systemd/system/{{ svc_name }}.service"
+    mode: "0644"
+  register: svc_unit
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: svc_unit.changed
+
+- name: Run the service
+  ansible.builtin.systemd_service:
+    name: "{{ svc_name }}"
+    enabled: true
+    state: >-
+      {{ 'restarted' if [svc_checkout, svc_pip, svc_unit, svc_secrets, svc_imported]
+                         | selectattr('changed', 'defined') | selectattr('changed') | list else 'started' }}
+  tags: [app]
+
+- name: Serve it on its subdomain
+  ansible.builtin.template:
+    src: site.caddy.j2
+    dest: "{{ caddy_sites_dir }}/{{ svc_name }}.caddy"
+    mode: "0644"
+  notify: Reload caddy
+
+- name: Check the service answers
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ svc.port }}{{ svc.health.path }}"
+    status_code: "{{ svc.health.status }}"
+  register: svc_health
+  until: svc_health is succeeded
+  retries: 15
+  delay: 2
+  when: svc.health is defined and not ansible_check_mode
+  tags: [app]

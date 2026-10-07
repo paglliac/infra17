@@ -1,0 +1,14 @@
+---
+timezone: Europe/Moscow
+srv_root: /srv
+
+caddy_sites_dir: /etc/caddy/sites
+
+node_major: 24
+node_dir: /opt/node
+
+# GitHub's published SSH host key (docs.github.com, "GitHub's SSH key fingerprints").
+github_host_key: "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+
+# Services site.yml deploys; -e only=<name> limits a run to one of them.
+only: ""

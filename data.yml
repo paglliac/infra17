@@ -1,0 +1,67 @@
+---
+# Replace a service's SQLite databases with the control machine's, the way they are right now.
+#   make data S=budget FROM=~/budget17/data
+# A .backup rather than a copy, so a database a local server is writing to comes over whole.
+- name: Bring the databases over
+  hosts: vds
+  become: true
+  gather_facts: false
+  vars:
+    svc: "{{ services[only] }}"
+    data_dir: "{{ srv_root }}/{{ only }}/data"
+    from_dir: "{{ from | expanduser }}"
+  tasks:
+    - name: Check the arguments
+      ansible.builtin.assert:
+        that:
+          - only in services
+          - services[only].sqlite is defined
+          - from is defined
+        fail_msg: "Usage: make data S=<service with sqlite:> FROM=<local data dir>"
+        quiet: true
+
+    - name: Make a local temp directory
+      ansible.builtin.tempfile:
+        state: directory
+      delegate_to: localhost
+      become: false
+      register: data_tmp
+
+    - name: Back up the local databases
+      ansible.builtin.command: sqlite3 -readonly {{ from_dir }}/{{ item }} ".backup '{{ data_tmp.path }}/{{ item }}'"
+      loop: "{{ svc.sqlite }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Stop the service
+      ansible.builtin.systemd_service:
+        name: "{{ only }}"
+        state: stopped
+
+    - name: Copy the databases
+      ansible.builtin.copy:
+        src: "{{ data_tmp.path }}/{{ item }}"
+        dest: "{{ data_dir }}/{{ item }}"
+        owner: "{{ only }}"
+        group: "{{ only }}"
+        mode: "0600"
+      loop: "{{ svc.sqlite }}"
+
+    - name: Drop the old WAL files
+      ansible.builtin.file:
+        path: "{{ data_dir }}/{{ item }}"
+        state: absent
+      loop: "{{ svc.sqlite | product(['-wal', '-shm']) | map('join') | list }}"
+
+    - name: Start the service
+      ansible.builtin.systemd_service:
+        name: "{{ only }}"
+        state: started
+
+    - name: Remove the local temp directory
+      ansible.builtin.file:
+        path: "{{ data_tmp.path }}"
+        state: absent
+      delegate_to: localhost
+      become: false

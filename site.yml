@@ -1,0 +1,50 @@
+---
+# Bring the host and every service to the declared state; safe to re-run.
+#   make deploy             everything
+#   make deploy S=budget    one service
+#   make app S=budget       only its code: git pull, dependencies, restart
+- name: Services
+  hosts: vds
+  become: true
+  vars:
+    selected: "{{ services | dict2items | selectattr('key', 'in', (only | length > 0) | ternary([only], services.keys() | list)) | list }}"
+  pre_tasks:
+    - name: Check the service name
+      ansible.builtin.assert:
+        that: only | length == 0 or only in services
+        fail_msg: "No service {{ only }} in group_vars/all/services.yml"
+        quiet: true
+      tags: [always]
+
+    - name: Check no two services share a port
+      ansible.builtin.assert:
+        that: ports | length == ports | unique | length
+        fail_msg: "Ports clash: {{ ports }}"
+        quiet: true
+      vars:
+        ports: "{{ (services.values() | map(attribute='port') | list) + (ports_taken.values() | list) }}"
+      tags: [always]
+
+  tasks:
+    - name: Caddy
+      ansible.builtin.include_role:
+        name: caddy
+
+    - name: Node.js
+      ansible.builtin.include_role:
+        name: node
+      when: "'node' in selected | map(attribute='value.runtime') | list"
+
+    - name: Python
+      ansible.builtin.include_role:
+        name: python
+      when: "'python' in selected | map(attribute='value.runtime') | list"
+
+    - name: Deploy the service
+      ansible.builtin.include_role:
+        name: service
+      loop: "{{ selected }}"
+      loop_control:
+        loop_var: svc_item
+        label: "{{ svc_item.key }}"
+      tags: [always]

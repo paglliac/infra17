@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+[Unit]
+Description={{ svc_name }} ({{ svc.repo }})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User={{ svc_name }}
+Group={{ svc_name }}
+WorkingDirectory={{ svc_app }}
+EnvironmentFile={{ svc_env }}
+Environment=PORT={{ svc.port }} HOST=127.0.0.1 TZ={{ timezone }}
+{% if svc.runtime == 'python' %}
+Environment=PATH={{ svc_home }}/venv/bin:/usr/bin:/bin
+{% else %}
+Environment=PATH={{ node_dir }}/bin:/usr/bin:/bin
+{% endif %}
+ExecStart={{ svc.exec }}
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths={{ svc_data }}
+
+[Install]
+WantedBy=multi-user.target

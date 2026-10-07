@@ -1,0 +1,12 @@
+---
+# Copy to inventory.local.yml (git-ignored) and fill in your values.
+vds:
+  hosts:
+    gang:
+      ansible_host: 203.0.113.10   # VPS address
+      ansible_user: admin          # sudo user, created by SecondBrain's deploy/bootstrap.yml
+      base_domain: example.com     # *.example.com -> ansible_host; each service gets <subdomain>.<base_domain>
+
+      # Per-machine paths for values that come from this computer (see services.yml, env_from).
+      # Leave out what this machine does not have.
+      budget_env_file: ~/budget17/.env

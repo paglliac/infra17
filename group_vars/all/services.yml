@@ -1,0 +1,37 @@
+---
+# Every service on the host. Adding one: an entry here, a free port, `make deploy`.
+#
+#   repo        GitHub repo; the server reads it with its own read-only deploy key
+#   version     branch or tag to check out (default main)
+#   port        127.0.0.1 port the service listens on; must not clash with another one or with ports_taken
+#   subdomain   <subdomain>.<base_domain> goes to the port through Caddy with HTTPS
+#   runtime     node | python — installed once per host
+#   exec        command line, run from the checkout; PORT, HOST and TZ are in its environment
+#   requirements  python only: requirements file in the repo, installed into /srv/<name>/venv
+#   data_link   path in the checkout that should point at /srv/<name>/data (for apps that keep data next to code)
+#   secrets     {KEY: length} generated into .env on the first run and never changed after
+#   env_from    local .env file on the control machine; env_keys are taken from it on the first run
+#   env_keys    see env_from
+#   sqlite      databases `make data` brings over from the control machine
+#   health      {path, status} checked after every run
+#
+# Layout on the host: /srv/<name>/app (checkout), /srv/<name>/data, /srv/<name>/.env, unit <name>.service.
+
+# Ports in use by things deployed elsewhere.
+ports_taken:
+  secondbrain: 3141   # SecondBrain's own deploy/ (repo paglliac/tasks17), on base_domain itself
+
+services:
+  budget:
+    repo: git@github.com:paglliac/budget17.git
+    port: 4317
+    subdomain: budget
+    runtime: node
+    exec: "{{ node_dir }}/bin/node src/web/server.ts"
+    data_link: data
+    secrets:
+      ACCESS_TOKEN: 40
+    env_from: "{{ budget_env_file | default('') }}"
+    env_keys: [ZENMONEY_TOKEN]
+    sqlite: [settings.db, zenmoney.db]
+    health: {path: /api/session, status: 401}
