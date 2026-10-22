@@ -5,7 +5,7 @@
 - name: Resolve the service settings
   ansible.builtin.set_fact:
     svc_name: "{{ svc_item.key }}"
-    svc: "{{ {'version': 'main', 'secrets': {}, 'env_from': '', 'env_keys': [], 'data_link': '', 'requirements': ''} | combine(svc_item.value) }}"
+    svc: "{{ {'version': 'main', 'secrets': {}, 'env_from': '', 'env_keys': [], 'data_link': '', 'requirements': '', 'build': '', 'environment': {}} | combine(svc_item.value) }}"
     svc_home: "{{ srv_root }}/{{ svc_item.key }}"
     svc_app: "{{ srv_root }}/{{ svc_item.key }}/app"
     svc_data: "{{ srv_root }}/{{ svc_item.key }}/data"
@@ -15,6 +15,7 @@
     svc_env_local: []
     svc_checkout: {}
     svc_pip: {}
+    svc_build: {}
     svc_secrets: {}
     svc_imported: {}
     svc_unit: {}
@@ -124,6 +125,39 @@
   when: svc.runtime == 'python' and svc.requirements | length > 0
   tags: [app]
 
+- name: Read which commit was built last
+  ansible.builtin.slurp:
+    src: "{{ svc_home }}/built-commit"
+  register: svc_built
+  failed_when: false
+  when: svc.build | length > 0
+  tags: [app]
+
+# Again after every new commit, and after a build that did not finish.
+- name: Build
+  become_user: "{{ svc_name }}"
+  ansible.builtin.shell: "{{ svc.build }}"  # noqa: command-instead-of-shell
+  args:
+    chdir: "{{ svc_app }}"
+  environment:
+    PATH: "{{ node_dir }}/bin:/usr/bin:/bin"
+    HOME: "{{ svc_home }}"
+  register: svc_build
+  when: >-
+    svc.build | length > 0
+    and (svc_built.content | default('') | b64decode | trim) != svc_checkout.after
+  tags: [app]
+
+- name: Remember the built commit
+  ansible.builtin.copy:
+    dest: "{{ svc_home }}/built-commit"
+    content: "{{ svc_checkout.after }}\n"
+    owner: "{{ svc_name }}"
+    group: "{{ svc_name }}"
+    mode: "0644"
+  when: svc_build is changed
+  tags: [app]
+
 
 # --- .env: created once, edited line by line, never overwritten ---
 
@@ -203,7 +237,7 @@
     name: "{{ svc_name }}"
     enabled: true
     state: >-
-      {{ 'restarted' if [svc_checkout, svc_pip, svc_unit, svc_secrets, svc_imported]
+      {{ 'restarted' if [svc_checkout, svc_pip, svc_build, svc_unit, svc_secrets, svc_imported]
                          | selectattr('changed', 'defined') | selectattr('changed') | list else 'started' }}
   tags: [app]
 

@@ -8,6 +8,10 @@
 #   runtime     node | python — installed once per host
 #   exec        command line, run from the checkout; PORT, HOST and TZ are in its environment
 #   requirements  python only: requirements file in the repo, installed into /srv/<name>/venv
+#   build       shell command run in the checkout after the dependencies, as the service user with Node on
+#               PATH (e.g. a frontend build); runs again whenever a new commit is checked out
+#   environment {KEY: value} for the unit, not secret (secrets go to .env)
+#   claude      true: the service runs Claude Code CLI (/usr/bin/claude from Anthropic's apt package)
 #   data_link   path in the checkout that should point at /srv/<name>/data (for apps that keep data next to code)
 #   secrets     {KEY: length} generated into .env on the first run and never changed after
 #   env_from    local .env file on the control machine; env_keys are taken from it on the first run
@@ -50,3 +54,21 @@ services:
     env_keys: [MM_TOKEN]
     sqlite: [recaps.db]
     health: {path: /healthz, status: 200}
+
+  go:
+    repo: git@github.com:paglliac/go-game.git
+    port: 4318
+    subdomain: go
+    runtime: python
+    requirements: backend/requirements.txt
+    build: cd frontend && npm ci --no-audit --no-fund && npm run build
+    exec: "{{ srv_root }}/go/venv/bin/uvicorn app.main:create_app --factory --app-dir backend --host 127.0.0.1 --port 4318"
+    data_link: backend/data
+    claude: true
+    environment:
+      CLAUDE_BIN: /usr/bin/claude
+      CLAUDE_CONFIG_DIR: /srv/go/data/claude   # its own, writable; no one is logged in there
+      DISABLE_AUTOUPDATER: "1"
+    # The owner's `claude setup-token` and the owner's player name: make env S=go K=…
+    env_keys: [CLAUDE_CODE_OAUTH_TOKEN, GO_OWNER]
+    health: {path: /api/health, status: 200}

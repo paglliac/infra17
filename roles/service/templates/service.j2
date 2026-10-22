@@ -15,6 +15,9 @@ Environment=PATH={{ svc_home }}/venv/bin:/usr/bin:/bin
 {% else %}
 Environment=PATH={{ node_dir }}/bin:/usr/bin:/bin
 {% endif %}
+{% for key, value in svc.environment.items() %}
+Environment={{ key }}={{ value }}
+{% endfor %}
 ExecStart={{ svc.exec }}
 Restart=always
 RestartSec=5

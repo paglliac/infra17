@@ -1,0 +1,17 @@
+---
+# Claude Code CLI as /usr/bin/claude, from Anthropic's apt repository. SecondBrain's deploy/ adds that repository
+# on this host and keeps the version; here it is only made sure the package is there, never upgraded.
+- name: Check Anthropic's apt repository is configured
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/claude-code.list
+  register: claude_repo
+
+- name: Stop if it is not
+  ansible.builtin.fail:
+    msg: No /etc/apt/sources.list.d/claude-code.list — run SecondBrain's deploy/ first, it sets up the repository.
+  when: not claude_repo.stat.exists
+
+- name: Install Claude Code CLI
+  ansible.builtin.apt:
+    name: claude-code
+    state: present

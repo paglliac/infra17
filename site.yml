@@ -33,12 +33,19 @@
     - name: Node.js
       ansible.builtin.include_role:
         name: node
-      when: "'node' in selected | map(attribute='value.runtime') | list"
+      when: >-
+        'node' in selected | map(attribute='value.runtime') | list
+        or selected | map(attribute='value.build') | select('defined') | select | list | length > 0
 
     - name: Python
       ansible.builtin.include_role:
         name: python
       when: "'python' in selected | map(attribute='value.runtime') | list"
+
+    - name: Claude Code CLI
+      ansible.builtin.include_role:
+        name: claude
+      when: selected | map(attribute='value.claude') | select('defined') | select | list | length > 0
 
     - name: Deploy the service
       ansible.builtin.include_role:
