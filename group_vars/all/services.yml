@@ -35,3 +35,18 @@ services:
     env_keys: [ZENMONEY_TOKEN]
     sqlite: [settings.db, zenmoney.db]
     health: {path: /api/session, status: 401}
+
+  recaps:
+    repo: git@github.com:paglliac/mm-recaps.git
+    port: 4325
+    subdomain: recaps
+    runtime: python
+    exec: "{{ srv_root }}/recaps/venv/bin/python -m recaps"
+    requirements: requirements.txt
+    data_link: data
+    secrets:
+      RECAPS_ACCESS_TOKEN: 40
+    env_from: "{{ recaps_env_file | default('') }}"
+    env_keys: [MM_TOKEN]
+    sqlite: [recaps.db]
+    health: {path: /healthz, status: 200}
