@@ -1,0 +1,20 @@
+{#
+  No comments in the file: it is imported by the Amnezia apps, not read by awg-quick. AllowedIPs is everything;
+  what actually goes through is chosen in the app (split tunneling). ::/0 with no IPv6 address in the tunnel
+  keeps IPv6 from leaking past it.
+#}
+[Interface]
+Address = {{ vpn.net }}.{{ item.value }}/32
+PrivateKey = {{ vpn_keys[item.key ~ '.key'] }}
+DNS = {{ vpn_dns | join(', ') }}
+MTU = {{ vpn_mtu }}
+{% for line in vpn_params %}
+{{ line }}
+{% endfor %}
+
+[Peer]
+PublicKey = {{ vpn_keys['server.pub'] }}
+PresharedKey = {{ vpn_keys[item.key ~ '.psk'] }}
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = {{ vpn_endpoint }}:{{ vpn.port }}
+PersistentKeepalive = 25

@@ -1,0 +1,104 @@
+---
+# AmneziaWG servers from group_vars/all/vpn.yml. A client's traffic is forwarded into vpn_uplink and NATed to
+# the host's address there: awg-quick already routes everything not from the host's own address into awg0,
+# forwarded packets included, and the NL server knows only that one address. ufw lets clients out to the
+# uplink and nowhere else, so with awg0 down they have no internet rather than a Russian one.
+
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - vpn_names | length == vpn_names | unique | length
+      - vpn_names | reject('match', '^[a-z0-9-]+$') | list | length == 0
+      - "'server' not in vpn_names"
+      - vpn_ports | length == vpn_ports | unique | length
+    fail_msg: >-
+      group_vars/all/vpn.yml: client names must be unique across servers, [a-z0-9-] and not `server`;
+      ports unique
+    quiet: true
+  vars:
+    vpn_names: "{{ vpn_servers.values() | map(attribute='clients') | map('list') | flatten }}"
+    vpn_ports: "{{ vpn_servers.values() | map(attribute='port') | list }}"
+
+- name: Check the client addresses
+  ansible.builtin.assert:
+    that:
+      - octets | length == octets | unique | length
+      - octets | select('ge', 2) | select('le', 254) | list | length == octets | length
+    fail_msg: "group_vars/all/vpn.yml, {{ item.key }}: last octets must be unique and 2..254"
+    quiet: true
+  vars:
+    octets: "{{ item.value.clients.values() | list }}"
+  loop: "{{ vpn_servers | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Check the uplink tunnel is up
+  ansible.builtin.command: awg show {{ vpn_uplink }} listen-port
+  register: vpn_uplink_state
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Stop without the uplink
+  ansible.builtin.assert:
+    that: vpn_uplink_state.rc == 0
+    fail_msg: >-
+      No {{ vpn_uplink }} on the host, so the clients' traffic has nowhere to go. It is the tunnel to the
+      NL server, brought up by `make vpn` in SecondBrain's deploy/.
+    quiet: true
+
+- name: Forward IPv4
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_file: /etc/sysctl.d/90-vpn.conf
+
+- name: Let the clients in
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.value.port | string }}"
+    proto: udp
+    comment: "vpn {{ item.key }}"
+  loop: "{{ vpn_servers | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Let the clients out through the uplink only
+  community.general.ufw:
+    rule: allow
+    route: true
+    interface_in: "{{ item.key }}"
+    interface_out: "{{ vpn_uplink }}"
+    comment: "vpn {{ item.key }}"
+  loop: "{{ vpn_servers | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} -> {{ vpn_uplink }}"
+
+- name: Create the local profiles directory
+  ansible.builtin.file:
+    path: "{{ vpn_profiles_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Look for qrencode here
+  ansible.builtin.command: qrencode --version
+  register: vpn_qrencode
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  delegate_to: localhost
+  become: false
+
+- name: Note there will be no QR codes
+  ansible.builtin.debug:
+    msg: "No qrencode on this machine, so no QR codes for the phones: brew install qrencode and run again."
+  when: vpn_qrencode.rc != 0
+
+- name: Run the servers
+  ansible.builtin.include_tasks: server.yml
+  loop: "{{ vpn_servers | dict2items }}"
+  loop_control:
+    loop_var: vpn_item
+    label: "{{ vpn_item.key }}"

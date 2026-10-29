@@ -1,0 +1,9 @@
+---
+# VPN for my devices through this host and on via awg0 (group_vars/all/vpn.yml); safe to re-run.
+#   make vpn    servers up, profiles into vpn-profiles/
+- name: VPN
+  hosts: vds
+  become: true
+  gather_facts: false
+  roles:
+    - vpn

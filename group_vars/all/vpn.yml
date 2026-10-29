@@ -1,0 +1,32 @@
+---
+# VPN for my devices. They connect to this host, and their traffic leaves through vpn_uplink: awg0, the
+# AmneziaWG tunnel to the NL server that SecondBrain's deploy/vpn.yml keeps up (it also installs AmneziaWG).
+# `make vpn` brings the servers up and writes every client's profile to vpn_profiles_dir.
+#
+#   port      UDP port the server listens on (opened in ufw)
+#   net       its /24 without the last octet; the server is .1
+#   amnezia   true: AmneziaWG with obfuscation (AmneziaVPN / AmneziaWG apps); false: plain WireGuard
+#   clients   {name: last octet of its address}. Keys are made on the first run and kept on the host in
+#             /etc/amnezia/amneziawg/<server>/; a removed client is dropped from the server, a new one
+#             gets its profile on the next `make vpn`.
+
+vpn_servers:
+  awg1:
+    port: 47321
+    net: 10.9.1
+    amnezia: true
+    clients: {mac: 2, mac2: 3, iphone: 4, iphone2: 5}
+
+  # RouterOS has no AmneziaWG (only third-party containers), so the router gets plain WireGuard.
+  awg2:
+    port: 47322
+    net: 10.9.2
+    amnezia: false
+    clients: {mikrotik: 2}
+
+vpn_uplink: awg0
+vpn_endpoint: "{{ base_domain }}"   # A record only: awg0 sends the host's IPv6 replies into an unreachable route
+vpn_mtu: 1280
+vpn_dns: [1.1.1.1, 1.0.0.1]         # asked through the tunnel, so from the NL address
+vpn_config_dir: /etc/amnezia/amneziawg
+vpn_profiles_dir: "{{ playbook_dir }}/vpn-profiles"   # git-ignored: the profiles carry private keys

@@ -1,0 +1,150 @@
+---
+# One server from vpn_servers: keys and obfuscation params (made once, kept in vpn_dir), awg-quick@<name>,
+# the clients' profiles on the control machine.
+
+- name: Resolve the server settings
+  ansible.builtin.set_fact:
+    vpn_if: "{{ vpn_item.key }}"
+    vpn: "{{ vpn_item.value }}"
+    vpn_dir: "{{ vpn_config_dir }}/{{ vpn_item.key }}"
+
+- name: Create the key directory
+  ansible.builtin.file:
+    path: "{{ vpn_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Generate the server key (first run only)
+  ansible.builtin.shell: umask 077 && awg genkey | tee server.key | awg pubkey > server.pub
+  args:
+    chdir: "{{ vpn_dir }}"
+    creates: "{{ vpn_dir }}/server.key"
+
+- name: Generate the client keys (first run only)
+  ansible.builtin.shell: >-
+    umask 077 && awg genkey | tee {{ item }}.key | awg pubkey > {{ item }}.pub && awg genpsk > {{ item }}.psk
+  args:
+    chdir: "{{ vpn_dir }}"
+    creates: "{{ vpn_dir }}/{{ item }}.key"
+  loop: "{{ vpn.clients | list }}"
+
+# AmneziaWG 1.0 params, which every Amnezia client takes. github.com/amnezia-vpn/amneziawg-linux-kernel-module,
+# README: Jc 1..128 (4..12 recommended), Jmin < Jmax <= 1280, S1 <= 1132, S2 <= 1188 (15..150 recommended),
+# S1 + 56 != S2 (else the handshake init and response come out the same size), H1..H4 distinct
+# (5..2147483647 recommended). Picked on every run, written only on the first.
+- name: Pick the obfuscation params
+  ansible.builtin.set_fact:
+    vpn_pick:
+      Jc: "{{ 11 | random(start=4) }}"
+      Jmin: "{{ 41 | random(start=8) }}"
+      Jmax: "{{ 121 | random(start=50) }}"
+      S1: "{{ 151 | random(start=15) }}"   # S1 + 56 >= 71 > S2
+      S2: "{{ 71 | random(start=15) }}"
+      H1: "{{ 2147483647 | random(start=5) }}"
+      H2: "{{ 2147483647 | random(start=5) }}"
+      H3: "{{ 2147483647 | random(start=5) }}"
+      H4: "{{ 2147483647 | random(start=5) }}"
+  when: vpn.amnezia
+
+- name: Check the headers are distinct
+  ansible.builtin.assert:
+    that: headers | unique | length == 4
+    fail_msg: Two of H1..H4 came out the same; run again
+    quiet: true
+  vars:
+    headers: "{{ [vpn_pick.H1, vpn_pick.H2, vpn_pick.H3, vpn_pick.H4] }}"
+  when: vpn.amnezia
+
+- name: Keep the obfuscation params (first run only)
+  ansible.builtin.copy:
+    dest: "{{ vpn_dir }}/params"
+    content: |
+      {% for key, value in vpn_pick.items() %}
+      {{ key }} = {{ value }}
+      {% endfor %}
+    force: false
+    owner: root
+    group: root
+    mode: "0600"
+  when: vpn.amnezia
+
+- name: Read the keys and params
+  ansible.builtin.shell: grep -H . *.key *.pub *.psk {{ 'params' if vpn.amnezia else '' }}
+  args:
+    chdir: "{{ vpn_dir }}"
+  register: vpn_files
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+# Lines are `<file>:<line>`; keys are base64, so the first colon is the only one.
+- name: Remember the keys and params
+  ansible.builtin.set_fact:
+    vpn_keys: "{{ dict(vpn_files.stdout_lines | reject('match', '^params:') | map('split', ':')) }}"
+    vpn_params: "{{ vpn_files.stdout_lines | select('match', '^params:') | map('regex_replace', '^params:', '') | list }}"
+  no_log: true
+
+- name: Write the server config
+  ansible.builtin.template:
+    src: server.conf.j2
+    dest: "{{ vpn_config_dir }}/{{ vpn_if }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  diff: false
+  register: vpn_config
+
+- name: Run the server
+  ansible.builtin.systemd_service:
+    name: "awg-quick@{{ vpn_if }}"
+    enabled: true
+    state: "{{ 'restarted' if vpn_config.changed else 'started' }}"
+
+- name: Check it listens
+  ansible.builtin.command: awg show {{ vpn_if }} listen-port
+  register: vpn_listen
+  changed_when: false
+  check_mode: false
+  failed_when: vpn_listen.stdout | trim != vpn.port | string
+
+- name: Write the client profiles
+  ansible.builtin.template:
+    src: client.conf.j2
+    dest: "{{ vpn_profiles_dir }}/{{ item.key }}.conf"
+    mode: "0600"
+  diff: false
+  loop: "{{ vpn.clients | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  delegate_to: localhost
+  become: false
+  register: vpn_profiles
+
+# The plain .conf text: AmneziaVPN's QR import takes it as it is (ImportController::extractConfigFromQr).
+- name: Write the profiles' QR codes for the phones
+  ansible.builtin.shell: umask 077 && qrencode -s 8 -o {{ item.item.key }}.png -r {{ item.item.key }}.conf
+  args:
+    chdir: "{{ vpn_profiles_dir }}"
+  loop: "{{ vpn_profiles.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  delegate_to: localhost
+  become: false
+  when: >-
+    vpn.amnezia and vpn_qrencode.rc == 0
+    and (item.changed or not (vpn_profiles_dir ~ '/' ~ item.item.key ~ '.png') is exists)
+
+- name: Write the RouterOS scripts
+  ansible.builtin.template:
+    src: client.rsc.j2
+    dest: "{{ vpn_profiles_dir }}/{{ item.key }}.rsc"
+    mode: "0600"
+  diff: false
+  loop: "{{ vpn.clients | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  delegate_to: localhost
+  become: false
+  when: not vpn.amnezia

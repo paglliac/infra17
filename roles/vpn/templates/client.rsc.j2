@@ -1,0 +1,8 @@
+# {{ item.key }}: plain WireGuard to {{ vpn_endpoint }}:{{ vpn.port }} ({{ vpn_if }}), RouterOS 7.
+# Paste into the terminal, or upload and `/import {{ item.key }}.rsc`. This is only the tunnel: which traffic
+# goes into it (an address list and a routing table) is set on the router. The server knows the router by
+# its one address, hence the masquerade for the LAN behind it.
+/interface wireguard add name=wg-{{ inventory_hostname }} mtu={{ vpn_mtu }} private-key="{{ vpn_keys[item.key ~ '.key'] }}"
+/interface wireguard peers add interface=wg-{{ inventory_hostname }} comment="{{ vpn_endpoint }}" public-key="{{ vpn_keys['server.pub'] }}" preshared-key="{{ vpn_keys[item.key ~ '.psk'] }}" endpoint-address={{ vpn_endpoint }} endpoint-port={{ vpn.port }} allowed-address=0.0.0.0/0 persistent-keepalive=25s
+/ip address add address={{ vpn.net }}.{{ item.value }}/24 interface=wg-{{ inventory_hostname }}
+/ip firewall nat add chain=srcnat out-interface=wg-{{ inventory_hostname }} action=masquerade comment="LAN through {{ vpn_endpoint }}"

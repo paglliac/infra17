@@ -2,7 +2,7 @@ ANSIBLE_PLAYBOOK ?= ansible-playbook
 S ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help deploy app env data
+.PHONY: help deploy app env data vpn
 
 help:  ## показать цели
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | expand -t 12
@@ -19,3 +19,6 @@ env: ## задать ключ K в .env сервиса S (значение сп�
 data: ## перенести базы сервиса S из локальной папки FROM поверх серверных
 	@printf "Базы %s на сервере заменятся копией из %s. Продолжить? [y/N] " "$(S)" "$(FROM)"; read a; [ "$$a" = y ]
 	$(ANSIBLE_PLAYBOOK) data.yml -e only=$(S) -e from=$(FROM)
+
+vpn: ## VPN для своих устройств: серверы на хосте, профили в vpn-profiles/
+	$(ANSIBLE_PLAYBOOK) vpn.yml
