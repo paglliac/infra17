@@ -45,6 +45,7 @@ services:
     port: 4325
     subdomain: recaps
     runtime: python
+    claude: true
     exec: "{{ srv_root }}/recaps/venv/bin/python -m recaps"
     requirements: requirements.txt
     data_link: data
