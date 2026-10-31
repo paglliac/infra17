@@ -47,6 +47,11 @@
         name: claude
       when: selected | map(attribute='value.claude') | select('defined') | select | list | length > 0
 
+    - name: Hosts reached past awg0
+      ansible.builtin.include_role:
+        name: direct
+      when: services.values() | selectattr('direct', 'defined') | list | length > 0
+
     - name: Deploy the service
       ansible.builtin.include_role:
         name: service

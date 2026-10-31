@@ -12,6 +12,8 @@
 #               PATH (e.g. a frontend build); runs again whenever a new commit is checked out
 #   environment {KEY: value} for the unit, not secret (secrets go to .env)
 #   claude      true: the service runs Claude Code CLI (/usr/bin/claude from Anthropic's apt package)
+#   direct      hosts the service reaches from the host's own address instead of through awg0 (sites that refuse
+#               the NL address); the direct role keeps the rules, `make direct` applies them alone
 #   data_link   path in the checkout that should point at /srv/<name>/data (for apps that keep data next to code)
 #   secrets     {KEY: length} generated into .env on the first run and never changed after
 #   env_from    local .env file on the control machine; env_keys are taken from it on the first run
@@ -37,6 +39,7 @@ services:
       ACCESS_TOKEN: 40
     env_from: "{{ budget_env_file | default('') }}"
     env_keys: [ZENMONEY_TOKEN]
+    direct: [api.zenmoney.ru]   # refuses the NL address since 2026-10-30; its Claude needs that address, so only this host
     sqlite: [settings.db, zenmoney.db]
     health: {path: /api/session, status: 401}
 

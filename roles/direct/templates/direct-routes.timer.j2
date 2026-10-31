@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Resolve the direct hosts again at boot and every hour
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target

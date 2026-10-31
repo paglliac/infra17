@@ -1,0 +1,34 @@
+---
+# Hosts the services reach from this host's own address instead of through awg0 (services.yml, `direct`): sites
+# that refuse the NL address. A script resolves them and keeps one ip rule per address; a timer runs it at boot
+# and every hour, so a site that moves to another address is followed.
+- name: Install the script
+  ansible.builtin.template:
+    src: direct-routes.j2
+    dest: /usr/local/sbin/direct-routes
+    mode: "0755"
+
+- name: Install the units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/systemd/system/{{ item }}
+    mode: "0644"
+  loop: [direct-routes.service, direct-routes.timer]
+  register: direct_units
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: direct_units.changed
+
+- name: Run the timer
+  ansible.builtin.systemd_service:
+    name: direct-routes.timer
+    enabled: true
+    state: started
+
+- name: Bring the rules to the hosts' addresses now
+  ansible.builtin.systemd_service:
+    name: direct-routes.service
+    state: restarted
+  changed_when: false

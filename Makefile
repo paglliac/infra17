@@ -2,7 +2,7 @@ ANSIBLE_PLAYBOOK ?= ansible-playbook
 S ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help deploy app env data vpn
+.PHONY: help deploy app env data vpn direct
 
 help:  ## показать цели
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | expand -t 12
@@ -22,3 +22,6 @@ data: ## перенести базы сервиса S из локальной п
 
 vpn: ## VPN для своих устройств: серверы на хосте, профили в vpn-profiles/
 	$(ANSIBLE_PLAYBOOK) vpn.yml
+
+direct: ## хосты из direct в services.yml — с адреса сервера, мимо awg0
+	$(ANSIBLE_PLAYBOOK) direct.yml

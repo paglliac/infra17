@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Reach {{ direct_hosts | join(', ') }} from the host's own address, past awg0
+After=network-online.target awg-quick@awg0.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/direct-routes {{ direct_hosts | join(' ') }}

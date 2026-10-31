@@ -1,0 +1,22 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Sends the host's own connections to the hosts in the arguments out through the main table, from the host's own
+# address, past awg0: for sites that refuse the NL address. The rules match only traffic the host makes itself
+# (iif lo), so the VPN clients' traffic still leaves through awg0. Each run resolves the hosts again and brings
+# the rules to their current addresses; without any address it leaves the rules as they are.
+set -eu
+priority={{ direct_priority }}
+
+want=$(for host in "$@"; do getent ahostsv4 "$host" | awk '{ print $1 }'; done | sort -u)
+if [ -z "$want" ]; then
+  echo "No IPv4 address for $*, the rules stay as they were" >&2
+  exit 1
+fi
+have=$(ip -4 rule show priority "$priority" | sed -n 's/.* to \([0-9.]*\) .*/\1/p' | sort -u)
+
+for address in $(printf '%s\n' "$have" | grep -vxF "$want" || true); do
+  ip -4 rule del to "$address" iif lo lookup main priority "$priority"
+done
+for address in $(printf '%s\n' "$want" | grep -vxF "$have" || true); do
+  ip -4 rule add to "$address" iif lo lookup main priority "$priority"
+done

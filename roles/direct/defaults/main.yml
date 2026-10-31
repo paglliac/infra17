@@ -1,0 +1,5 @@
+---
+# Every service's `direct` hosts (services.yml); the rules are host-wide, so a run for one service keeps them all.
+direct_hosts: "{{ services.values() | map(attribute='direct', default=[]) | flatten | unique }}"
+# Before awg-quick's rules (100 and up), so these addresses never reach table 51820.
+direct_priority: 90

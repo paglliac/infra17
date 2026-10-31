@@ -1,0 +1,9 @@
+---
+# Hosts the services reach from this host's own address, past awg0 (services.yml, `direct`); safe to re-run.
+#   make direct    the rules alone, without deploying any service
+- name: Direct hosts
+  hosts: vds
+  become: true
+  gather_facts: false
+  roles:
+    - direct
