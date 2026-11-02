@@ -1,22 +1,48 @@
 #!/bin/sh
 # {{ ansible_managed }}
-# Sends the host's own connections to the hosts in the arguments out through the main table, from the host's own
-# address, past awg0: for sites that refuse the NL address. The rules match only traffic the host makes itself
-# (iif lo), so the VPN clients' traffic still leaves through awg0. Each run resolves the hosts again and brings
-# the rules to their current addresses; without any address it leaves the rules as they are.
+# Sends connections to the hosts in the arguments out through the main table, from the host's own address,
+# past awg0: for sites that refuse the NL address. It covers the host itself and the VPN clients
+# (group_vars/all/vpn.yml) alike: ufw lets the clients out to the uplink to these addresses and nowhere else,
+# and their source is NATed to the host's address there, so with awg0 down they still get no other Russian
+# internet. Each run resolves the hosts again and brings the rules to their current addresses; without any
+# address it leaves the rules as they are.
 set -eu
 priority={{ direct_priority }}
+# <interface>:<client subnet> of every VPN server
+clients="{% for name, server in (vpn_servers | default({})).items() %}{{ name }}:{{ server.net }}.0/24 {% endfor %}"
 
 want=$(for host in "$@"; do getent ahostsv4 "$host" | awk '{ print $1 }'; done | sort -u)
 if [ -z "$want" ]; then
   echo "No IPv4 address for $*, the rules stay as they were" >&2
   exit 1
 fi
+uplink=$(ip -4 route show default table main | awk '{ print $5; exit }')
+if [ -z "$uplink" ]; then
+  echo "No default route in the main table, the rules stay as they were" >&2
+  exit 1
+fi
+
+# Rules from before the VPN clients went direct too matched only the host's own traffic (iif lo).
+while ip -4 rule show priority "$priority" | grep -q ' iif lo '; do
+  ip -4 rule del priority "$priority" iif lo
+done
 have=$(ip -4 rule show priority "$priority" | sed -n 's/.* to \([0-9.]*\) .*/\1/p' | sort -u)
 
 for address in $(printf '%s\n' "$have" | grep -vxF "$want" || true); do
-  ip -4 rule del to "$address" iif lo lookup main priority "$priority"
+  ip -4 rule del to "$address" lookup main priority "$priority"
+  for client in $clients; do
+    ufw route delete allow in on "${client%%:*}" out on "$uplink" to "$address" >/dev/null || true
+  done
 done
 for address in $(printf '%s\n' "$want" | grep -vxF "$have" || true); do
-  ip -4 rule add to "$address" iif lo lookup main priority "$priority"
+  ip -4 rule add to "$address" lookup main priority "$priority"
+done
+
+# ufw skips a rule it already has, so every address is passed every run.
+for client in $clients; do
+  for address in $want; do
+    ufw route allow in on "${client%%:*}" out on "$uplink" to "$address" comment direct >/dev/null
+  done
+  iptables -t nat -C POSTROUTING -s "${client#*:}" -o "$uplink" -j MASQUERADE 2>/dev/null \
+    || iptables -t nat -A POSTROUTING -s "${client#*:}" -o "$uplink" -j MASQUERADE
 done

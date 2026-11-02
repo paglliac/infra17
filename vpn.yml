@@ -7,3 +7,4 @@
   gather_facts: false
   roles:
     - vpn
+    - direct   # the direct sites past awg0 for the clients too

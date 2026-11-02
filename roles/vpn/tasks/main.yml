@@ -2,7 +2,8 @@
 # AmneziaWG servers from group_vars/all/vpn.yml. A client's traffic is forwarded into vpn_uplink and NATed to
 # the host's address there: awg-quick already routes everything not from the host's own address into awg0,
 # forwarded packets included, and the NL server knows only that one address. ufw lets clients out to the
-# uplink and nowhere else, so with awg0 down they have no internet rather than a Russian one.
+# uplink and nowhere else, so with awg0 down they have no internet rather than a Russian one. The one exception
+# is the direct role: the sites that refuse the NL address, which it lets out from the host's own address.
 
 - name: Check the settings
   ansible.builtin.assert:
