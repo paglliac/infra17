@@ -27,6 +27,12 @@
 ports_taken:
   secondbrain: 3141   # SecondBrain's own deploy/ (repo paglliac/tasks17), on base_domain itself
 
+# `direct` hosts of things deployed elsewhere (see `direct` above); the direct role owns every such rule on the host.
+direct_taken:
+  # ktalk transcripts and the Exchange calendar: both time out from the NL address since 2026-11; SecondBrain's
+  # Claude needs that address, so only these hosts
+  secondbrain: [avito.ktalk.ru, exchange.avito.ru]
+
 services:
   budget:
     repo: git@github.com:paglliac/budget17.git
