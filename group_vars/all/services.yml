@@ -99,3 +99,15 @@ services:
     # the hub reads the calendar through the motor (task Х8).
     direct: [exchange.avito.ru]
     health: {path: /healthz, status: 200}
+
+  assistant:
+    repo: git@github.com:paglliac/assistant17.git
+    port: 4330
+    subdomain: assistant
+    runtime: python
+    requirements: service/requirements.txt
+    exec: "{{ srv_root }}/assistant/venv/bin/uvicorn assistant.app:create_app --factory --app-dir service --host 127.0.0.1 --port 4330"
+    # The phone app's key; the app reads it from ~/.config/assistant-proto/assistant.env at build time.
+    secrets:
+      ASSISTANT_TOKEN: 40
+    health: {path: /healthz, status: 200}
