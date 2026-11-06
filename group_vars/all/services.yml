@@ -82,3 +82,17 @@ services:
     # The owner's `claude setup-token` and the owner's player name: make env S=go K=…
     env_keys: [CLAUDE_CODE_OAUTH_TOKEN, GO_OWNER]
     health: {path: /api/health, status: 200}
+
+  motor:
+    repo: git@github.com:paglliac/engine17.git
+    port: 4319
+    subdomain: motor
+    runtime: python
+    exec: "{{ srv_root }}/motor/venv/bin/python -m motor"
+    requirements: requirements.txt
+    data_link: data            # motor.db: consumers, provider tokens, provider state
+    secrets:
+      MOTOR_SESSION_SECRET: 40
+    # The page password: `make hash-password` in engine17, then make env S=motor K=MOTOR_PASSWORD_HASH.
+    # Until then the page says so; providers already answer to consumer tokens.
+    health: {path: /healthz, status: 200}
