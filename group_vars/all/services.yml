@@ -112,9 +112,16 @@ services:
     runtime: python
     requirements: service/requirements.txt
     exec: "{{ srv_root }}/assistant/venv/bin/uvicorn assistant.app:create_app --factory --app-dir service --host 127.0.0.1 --port 4330"
+    data_link: service/data    # assistant.db: the morning stack, the selection rules
+    claude: true               # claude --print picks the morning stack
+    environment:
+      CLAUDE_CONFIG_DIR: /srv/assistant/data/claude   # its own, writable
+      DISABLE_AUTOUPDATER: "1"
     # The phone app's key; the app reads it from ~/.config/assistant-proto/assistant.env at build time.
     secrets:
       ASSISTANT_TOKEN: 40
+    # «Ждут от меня» from recaps, the hub's projects, the owner's `claude setup-token`: make env S=assistant K=…
+    env_keys: [RECAPS_ACCESS_TOKEN, SB_API_TOKEN, CLAUDE_CODE_OAUTH_TOKEN]
     health: {path: /healthz, status: 200}
 
   tv:
