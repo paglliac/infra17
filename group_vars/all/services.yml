@@ -123,4 +123,14 @@ services:
     # YouTube search is yt-dlp: when it breaks, bump yt-dlp in server/requirements.txt and `make app S=tv`.
     secrets:
       TV_TOKEN: 40
+    # «Что посмотреть?» asks Claude; the family's ratings live in data/taste.db. The server finds the CLI on
+    # PATH and keeps its state in data/claude by itself, so `make app` is enough even before a full deploy.
+    claude: true
+    data_link: data
+    environment:
+      CLAUDE_BIN: /usr/bin/claude
+      CLAUDE_CONFIG_DIR: /srv/tv/data/claude   # its own, writable; no one is logged in there
+      DISABLE_AUTOUPDATER: "1"
+    # The owner's `claude setup-token` (the same one recaps uses): make env S=tv K=CLAUDE_CODE_OAUTH_TOKEN
+    env_keys: [CLAUDE_CODE_OAUTH_TOKEN]
     health: {path: /healthz, status: 200}
