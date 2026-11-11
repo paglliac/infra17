@@ -111,3 +111,16 @@ services:
     secrets:
       ASSISTANT_TOKEN: 40
     health: {path: /healthz, status: 200}
+
+  tv:
+    repo: git@github.com:paglliac/tv17.git
+    port: 4331
+    subdomain: tv
+    runtime: python
+    requirements: server/requirements.txt
+    exec: "{{ srv_root }}/tv/venv/bin/uvicorn tv.app:create_app --factory --app-dir server --host 127.0.0.1 --port 4331"
+    # The TV app's key; the APK takes it from android/local.properties (tv.token) at build time.
+    # YouTube search is yt-dlp: when it breaks, bump yt-dlp in server/requirements.txt and `make app S=tv`.
+    secrets:
+      TV_TOKEN: 40
+    health: {path: /healthz, status: 200}
