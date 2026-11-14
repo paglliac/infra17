@@ -97,9 +97,9 @@ services:
       MOTOR_SESSION_SECRET: 40
     # The page password: `make hash-password` in engine17, then make env S=motor K=MOTOR_PASSWORD_HASH.
     # Until then the page says so; providers already answer to consumer tokens.
-    # The Exchange calendar (task П2) times out from the NL address. Also in direct_taken of SecondBrain until
-    # the hub reads the calendar through the motor (task Х8).
-    direct: [exchange.avito.ru]
+    # The Exchange calendar (task П2) and ktalk (П6) time out from the NL address. Also in direct_taken of
+    # SecondBrain until the hub reads them through the motor (tasks Х8, Х9).
+    direct: [exchange.avito.ru, avito.ktalk.ru]
     # The shared --mcp-config for the services that run `claude -p` (engine17, task К2): every provider's address,
     # the token is ${MOTOR_TOKEN} from the calling service's .env.
     publish: {plugin/.mcp.json: /etc/motor/mcp.json}
