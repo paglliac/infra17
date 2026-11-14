@@ -15,6 +15,8 @@
 #   direct      hosts the service reaches from the host's own address instead of through awg0 (sites that refuse
 #               the NL address); the direct role keeps the rules, `make direct` applies them alone
 #   data_link   path in the checkout that should point at /srv/<name>/data (for apps that keep data next to code)
+#   publish     {path in the checkout: host path} copied out on every run, root-owned and readable by all (e.g. a
+#               file other services read, since /srv/<name> is closed to them)
 #   secrets     {KEY: length} generated into .env on the first run and never changed after
 #   env_from    local .env file on the control machine; env_keys are taken from it on the first run
 #   env_keys    see env_from
@@ -98,6 +100,9 @@ services:
     # The Exchange calendar (task П2) times out from the NL address. Also in direct_taken of SecondBrain until
     # the hub reads the calendar through the motor (task Х8).
     direct: [exchange.avito.ru]
+    # The shared --mcp-config for the services that run `claude -p` (engine17, task К2): every provider's address,
+    # the token is ${MOTOR_TOKEN} from the calling service's .env.
+    publish: {plugin/.mcp.json: /etc/motor/mcp.json}
     health: {path: /healthz, status: 200}
 
   assistant:

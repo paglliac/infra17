@@ -5,7 +5,7 @@
 - name: Resolve the service settings
   ansible.builtin.set_fact:
     svc_name: "{{ svc_item.key }}"
-    svc: "{{ {'version': 'main', 'secrets': {}, 'env_from': '', 'env_keys': [], 'data_link': '', 'requirements': '', 'build': '', 'environment': {}} | combine(svc_item.value) }}"
+    svc: "{{ {'version': 'main', 'secrets': {}, 'env_from': '', 'env_keys': [], 'data_link': '', 'requirements': '', 'build': '', 'environment': {}, 'publish': {}} | combine(svc_item.value) }}"
     svc_home: "{{ srv_root }}/{{ svc_item.key }}"
     svc_app: "{{ srv_root }}/{{ svc_item.key }}/app"
     svc_data: "{{ srv_root }}/{{ svc_item.key }}/data"
@@ -113,6 +113,27 @@
     owner: "{{ svc_name }}"
     group: "{{ svc_name }}"
   when: svc.data_link | length > 0
+  tags: [app]
+
+- name: Create the directories of the published files
+  ansible.builtin.file:
+    path: "{{ item.value | dirname }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ svc.publish | dict2items }}"
+  loop_control: {label: "{{ item.value }}"}
+  tags: [app]
+
+- name: Publish files from the checkout for the other services
+  ansible.builtin.copy:
+    src: "{{ svc_app }}/{{ item.key }}"
+    dest: "{{ item.value }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ svc.publish | dict2items }}"
+  loop_control: {label: "{{ item.key }} → {{ item.value }}"}
   tags: [app]
 
 - name: Install Python dependencies
