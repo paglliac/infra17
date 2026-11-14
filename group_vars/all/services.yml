@@ -120,8 +120,9 @@ services:
     # The phone app's key; the app reads it from ~/.config/assistant-proto/assistant.env at build time.
     secrets:
       ASSISTANT_TOKEN: 40
-    # «Ждут от меня» from recaps, the hub's projects, the owner's `claude setup-token`: make env S=assistant K=…
-    env_keys: [RECAPS_ACCESS_TOKEN, SB_API_TOKEN, CLAUDE_CODE_OAUTH_TOKEN]
+    # «Ждут от меня» from recaps, the hub's projects, the owner's `claude setup-token`, the motor's consumer
+    # «assistant» (the chat reads through /etc/motor/mcp.json): make env S=assistant K=…
+    env_keys: [RECAPS_ACCESS_TOKEN, SB_API_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, MOTOR_TOKEN]
     health: {path: /healthz, status: 200}
 
   tv:
