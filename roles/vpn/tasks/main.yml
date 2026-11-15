@@ -75,6 +75,32 @@
   loop_control:
     label: "{{ item.key }} -> {{ vpn_uplink }}"
 
+- name: Check the open ports
+  ansible.builtin.assert:
+    that:
+      - item.server in vpn_servers
+      - item.client in vpn_servers[item.server].clients
+      - item.port | int > 0
+    fail_msg: "group_vars/all/vpn.yml, vpn_open: no client {{ item.client }} on {{ item.server }}, or a bad port"
+    quiet: true
+  loop: "{{ vpn_open | default([]) }}"
+  loop_control:
+    label: "{{ item.server }} {{ item.client }}:{{ item.port }}"
+
+- name: Let the clients reach the open ports on each other
+  community.general.ufw:
+    rule: allow
+    route: true
+    interface_in: "{{ item.server }}"
+    interface_out: "{{ item.server }}"
+    to_ip: "{{ vpn_servers[item.server].net }}.{{ vpn_servers[item.server].clients[item.client] }}"
+    to_port: "{{ item.port | string }}"
+    proto: tcp
+    comment: "vpn {{ item.server }} {{ item.client }}:{{ item.port }}"
+  loop: "{{ vpn_open | default([]) }}"
+  loop_control:
+    label: "{{ item.server }} {{ item.client }}:{{ item.port }}"
+
 - name: Create the local profiles directory
   ansible.builtin.file:
     path: "{{ vpn_profiles_dir }}"

@@ -24,6 +24,12 @@ vpn_servers:
     amnezia: false
     clients: {mikrotik: 2}
 
+# Ports a client opens to the other clients of its server (tcp). Without an entry here the clients don't
+# reach each other at all (ufw drops forwarding between them; only ping passes). Removing an entry does not
+# delete its ufw rule: `ufw route delete allow ...` on the host.
+vpn_open:
+  - {server: awg1, client: mac2, port: 22}   # SSH to the home server, mac2 = BlackMacBook
+
 vpn_uplink: awg0
 vpn_endpoint: "{{ base_domain }}"   # A record only: awg0 sends the host's IPv6 replies into an unreachable route
 vpn_mtu: 1280
