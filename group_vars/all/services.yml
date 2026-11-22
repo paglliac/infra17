@@ -144,3 +144,22 @@ services:
     # Set the DeepSeek key with: make env S=tv K=TV_AI_API_KEY
     env_keys: [TV_AI_API_KEY]
     health: {path: /healthz, status: 200}
+
+  floorplan:
+    repo: https://github.com/paglliac/floorplan17.git
+    port: 4332
+    subdomain: floorplan
+    runtime: python
+    exec: '/usr/bin/python3 -m http.server ${PORT} --bind ${HOST} --directory {{ srv_root }}/floorplan/public'
+    publish:
+      index.html: "{{ srv_root }}/floorplan/public/index.html"
+      viewer.css: "{{ srv_root }}/floorplan/public/viewer.css"
+      scene.js: "{{ srv_root }}/floorplan/public/scene.js"
+      rooms.js: "{{ srv_root }}/floorplan/public/rooms.js"
+      living.js: "{{ srv_root }}/floorplan/public/living.js"
+      kitchen.js: "{{ srv_root }}/floorplan/public/kitchen.js"
+      vendor/three.module.min.js: "{{ srv_root }}/floorplan/public/vendor/three.module.min.js"
+      vendor/three.core.min.js: "{{ srv_root }}/floorplan/public/vendor/three.core.min.js"
+      vendor/RoundedBoxGeometry.js: "{{ srv_root }}/floorplan/public/vendor/RoundedBoxGeometry.js"
+      vendor/LICENSE: "{{ srv_root }}/floorplan/public/vendor/LICENSE"
+    health: {path: /, status: 200}
