@@ -154,6 +154,11 @@ services:
     publish:
       index.html: "{{ srv_root }}/floorplan/public/index.html"
       viewer.css: "{{ srv_root }}/floorplan/public/viewer.css"
+      textures/bath-tile.jpg: "{{ srv_root }}/floorplan/public/textures/bath-tile.jpg"
+      mirrors.js: "{{ srv_root }}/floorplan/public/mirrors.js"
+      bathroom.js: "{{ srv_root }}/floorplan/public/bathroom.js"
+      hall.js: "{{ srv_root }}/floorplan/public/hall.js"
+      nursery.js: "{{ srv_root }}/floorplan/public/nursery.js"
       scene.js: "{{ srv_root }}/floorplan/public/scene.js"
       rooms.js: "{{ srv_root }}/floorplan/public/rooms.js"
       living.js: "{{ srv_root }}/floorplan/public/living.js"
